@@ -1,5 +1,4 @@
-export default async function handler(req, res) {
-  // CORS Headers
+const handler = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -13,17 +12,6 @@ export default async function handler(req, res) {
   const { contents, model = 'gemini-2.5-flash' } = req.body || {};
   if (!contents) return res.status(400).json({ error: 'Missing contents' });
 
-  // Simple rate limiting via IP (30 req/min)
-  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
-  const now = Date.now();
-  if (!handler._rateMap) handler._rateMap = {};
-  const bucket = handler._rateMap[ip] || { count: 0, reset: now + 60000 };
-  if (now > bucket.reset) { bucket.count = 0; bucket.reset = now + 60000; }
-  bucket.count++;
-  handler._rateMap[ip] = bucket;
-  if (bucket.count > 30) return res.status(429).json({ error: 'Rate limit exceeded. Please wait a moment.' });
-
-  // Trim history to last 20 turns to control cost
   const trimmed = contents.slice(-20);
 
   try {
@@ -43,4 +31,6 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
-}
+};
+
+module.exports = handler;
