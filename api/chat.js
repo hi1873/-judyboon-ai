@@ -1,4 +1,6 @@
-const handler = async (req, res) => {
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -7,30 +9,34 @@ const handler = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const API_KEY = process.env.GEMINI_API_KEY;
-  if (!API_KEY) return res.status(500).json({ error: 'API key not configured on server' });
+  if (!API_KEY) return res.status(500).json({ error: 'API key not configured' });
 
-  const { contents, model = 'gemini-2.5-flash' } = req.body || {};
+  const { contents } = req.body || {};
   if (!contents) return res.status(400).json({ error: 'Missing contents' });
 
-  const trimmed = contents.slice(-20);
-
   try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: trimmed }),
-      }
-    );
+    const genAI = new GoogleGenerativeAI(API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-    const data = await geminiRes.json();
-    if (!geminiRes.ok) return res.status(geminiRes.status).json({ error: data.error?.message || 'Gemini API error' });
+    const trimmed = contents.slice(-20);
 
-    return res.status(200).json(data);
+    // แปลง contents format เป็น chat history
+    const history = trimmed.slice(0, -1).map(c => ({
+      role: c.role === 'model' ? 'model' : 'user',
+      parts: c.parts
+    }));
+
+    const lastMessage = trimmed[trimmed.length - 1];
+
+    const chat = model.startChat({ history });
+    const result = await chat.sendMessage(lastMessage.parts);
+    const text = result.response.text();
+
+    return res.status(200).json({
+      candidates: [{ content: { parts: [{ text }] } }]
+    });
+
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 };
-
-module.exports = handler;
